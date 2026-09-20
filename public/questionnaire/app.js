@@ -1119,16 +1119,9 @@ function renderReview(container){
     container.appendChild(cardWrap);
   });
 
-  // Export + Submit
+  // Submit
   const actionsCard = h('div',{class:'card'});
-  actionsCard.appendChild(h('h3',{text:'Export & Submit'}));
-  const btnRow = h('div',{style:'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;'});
-  const exportJsonBtn = h('button',{class:'btn-secondary', type:'button', text:'⬇ Export JSON'});
-  exportJsonBtn.addEventListener('click', exportJSON);
-  const exportCsvBtn = h('button',{class:'btn-secondary', type:'button', text:'⬇ Export CSV'});
-  exportCsvBtn.addEventListener('click', exportCSV);
-  btnRow.appendChild(exportJsonBtn); btnRow.appendChild(exportCsvBtn);
-  actionsCard.appendChild(btnRow);
+  actionsCard.appendChild(h('h3',{text:'Submit'}));
 
   const submitBtn = h('button',{class:'btn-primary btn-block', type:'button', text: submitting?'Submitting…':'Submit Questionnaire'});
   submitBtn.disabled = submitting;
@@ -1149,52 +1142,6 @@ function allValidationErrors(){
     }
   });
   return [...new Set(errs)];
-}
-
-/* ---------------------------------------------------------
-   7. EXPORT
---------------------------------------------------------- */
-function downloadBlob(content, filename, type){
-  const blob = new Blob([content], {type});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url), 2000);
-}
-function exportJSON(){
-  const payload = {
-    common: {
-      respondent: state.respondent,
-      sharedRequirements: state.shared
-    },
-    planSpecific: state.plans
-  };
-  downloadBlob(JSON.stringify(payload, null, 2), 'WFC_Questionnaire_Responses.json', 'application/json');
-  showToast('JSON exported');
-}
-function csvEscape(v){
-  if(v===undefined||v===null) v='';
-  v = String(v).replace(/"/g,'""');
-  return '"'+v+'"';
-}
-function exportCSV(){
-  const rows = [['Section','Plan','Field','Value']];
-  rows.push(['Respondent','', 'Name', state.respondent.name]);
-  rows.push(['Respondent','', 'Email', state.respondent.email]);
-  rows.push(['Respondent','', 'Company', state.respondent.company]);
-  state.plans.forEach(p=>{
-    const flat = {
-      'Classification':p.moduleClass, 'Compensation Type':p.compensationType, 'Frequency':p.frequency, 'Performance Linked':p.performanceLinked,
-      'Compa-Ratio Linked':p.compaRatioLinked, 'Budget Required':p.budgetRequired, 'Approval Required':p.approvalRequired,
-      'Salary Update':p.salaryUpdate, 'Payroll Impact':p.payrollImpact, 'Proration Required':p.prorationRequired,
-      'Manager Worksheet':p.managerWorksheetReq
-    };
-    Object.keys(flat).forEach(k=> rows.push(['Plan Register', p.name||p.id, k, flat[k]]));
-  });
-  const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
-  downloadBlob(csv, 'WFC_Questionnaire_Responses.csv', 'text/csv');
-  showToast('CSV exported');
 }
 
 /* ---------------------------------------------------------
@@ -1397,13 +1344,9 @@ function renderSuccessScreen(){
   }
 
   const btnRow = h('div',{style:'display:flex;gap:10px;justify-content:center;flex-wrap:wrap;'});
-  const dlBtn = h('button',{class:'btn-secondary', type:'button', text:'⬇ Download Responses (JSON)'});
-  dlBtn.addEventListener('click', exportJSON);
-  const dlCsv = h('button',{class:'btn-secondary', type:'button', text:'⬇ Download Responses (CSV)'});
-  dlCsv.addEventListener('click', exportCSV);
   const editBtn2 = h('button',{class:'btn-secondary', type:'button', text:'Edit Responses'});
   editBtn2.addEventListener('click', ()=>{ state.submitted=false; goToSectionId('review'); });
-  btnRow.appendChild(dlBtn); btnRow.appendChild(dlCsv); btnRow.appendChild(editBtn2);
+  btnRow.appendChild(editBtn2);
   success.appendChild(btnRow);
 
   main.appendChild(success);

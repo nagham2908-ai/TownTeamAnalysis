@@ -44,7 +44,7 @@ header.app-header{
 .header-actions{display:flex;gap:8px;flex-wrap:wrap;}
 
 /* ===== Buttons ===== */
-button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:7px;border:1px solid transparent;padding:9px 16px;transition:background .15s,border-color .15s,color .15s;}
+button, a.btn-primary, a.btn-secondary, a.btn-ghost, a.btn-danger{font-family:inherit;font-size:13px;cursor:pointer;border-radius:7px;border:1px solid transparent;padding:9px 16px;transition:background .15s,border-color .15s,color .15s;display:inline-block;text-decoration:none;line-height:1.3;}
 .btn-primary{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;}
 .btn-primary:hover{background:var(--navy);}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
