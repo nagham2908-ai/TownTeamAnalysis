@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   const db = supabaseAdmin();
   const { data: row, error } = await db
     .from("responses")
-    .select("data, submitted, submission_ref, submitted_at, pdf_path, docx_path")
+    .select("data, submitted, submission_ref, submitted_at, pdf_path, docx_path, updated_at")
     .eq("token", token)
     .maybeSingle();
 
@@ -35,6 +35,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
     submitted: row.submitted,
     submissionRef: row.submission_ref,
     submissionDate: row.submitted_at,
+    updatedAt: row.updated_at,
     pdfUrl,
     docxUrl,
   });

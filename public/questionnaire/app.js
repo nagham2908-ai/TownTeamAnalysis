@@ -101,24 +101,48 @@ let state = freshState();
 let stateReady = false;
 let submitting = false;
 
+/* localStorage stores {savedAt, state} rather than raw state, so on load we
+   can tell whether the local copy is NEWER than what the server has (e.g.
+   the tab was closed right after an edit, before the debounced save fired)
+   and avoid silently overwriting unsynced changes with stale server data. */
 function loadLocalDraft(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.state) return parsed;
+      return {savedAt:0, state:parsed}; // legacy format from before this change
+    }
   }catch(e){}
   return null;
 }
+function saveLocalDraft(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({savedAt:Date.now(), state:state})); }catch(e){}
+}
 
-/* Loads the draft from the server (source of truth), falling back to the
-   last locally-cached copy if the network is unavailable. */
+/* Loads the draft, preferring whichever of {local, server} is newer, so a
+   tab closed moments after typing (before the autosave debounce fired)
+   never loses that edit to an older server copy on the next visit. */
 async function initState(){
   const local = loadLocalDraft();
-  if(local) state = Object.assign(freshState(), local);
+  let usedLocal = false;
+  if(local && local.state){
+    state = Object.assign(freshState(), local.state);
+    usedLocal = true;
+  }
   try{
     const res = await fetch("/api/responses/"+encodeURIComponent(TOKEN));
     if(res.ok){
       const payload = await res.json();
-      if(payload && payload.data) state = Object.assign(freshState(), payload.data);
+      if(payload && payload.data){
+        const serverTime = payload.updatedAt ? new Date(payload.updatedAt).getTime() : 0;
+        const localTime = (usedLocal && local) ? local.savedAt : 0;
+        if(!usedLocal || serverTime >= localTime){
+          state = Object.assign(freshState(), payload.data);
+          usedLocal = false;
+        }
+        // else: local edit is newer and unsynced — keep it, reconciled below.
+      }
       if(payload && payload.submitted){
         state.submitted = true;
         state.submissionRef = payload.submissionRef || state.submissionRef;
@@ -132,7 +156,25 @@ async function initState(){
   }
   stateReady = true;
   render();
+  if(usedLocal) persist(); // push the newer local draft back to the server
 }
+
+/* Best-effort save of whatever's in memory when the tab is closing — the
+   600ms autosave debounce alone can lose the last few keystrokes otherwise. */
+function flushOnUnload(){
+  if(!stateReady) return;
+  saveLocalDraft();
+  try{
+    fetch("/api/responses/"+encodeURIComponent(TOKEN), {
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({data: state}),
+      keepalive:true
+    });
+  }catch(e){}
+}
+window.addEventListener('pagehide', flushOnUnload);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushOnUnload(); });
 
 let mobileNavOpen=false;
 let saveTimer=null;
@@ -161,7 +203,7 @@ function saveToServer(onDone){
 }
 
 function persist(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  saveLocalDraft();
   updateSaveIndicator('saving');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>saveToServer(), 600);
@@ -169,7 +211,7 @@ function persist(){
 
 function flushSave(onDone){
   clearTimeout(saveTimer);
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  saveLocalDraft();
   updateSaveIndicator('saving');
   saveToServer(onDone);
 }
@@ -1166,7 +1208,7 @@ async function submitQuestionnaire(){
     state._docxUrl = result.docxUrl;
     state._emailSent = result.emailSent;
     state._emailError = result.emailError;
-    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    saveLocalDraft();
   }catch(e){
     showToast('Submit failed — check your connection and try again.');
   }finally{
