@@ -40,9 +40,7 @@ const PLAN_SUBSECTIONS: { key: string; title: string }[] = [
   { key: "performance", title: "Performance" },
   { key: "compaRatio", title: "Compa-Ratio" },
   { key: "budget", title: "Budget" },
-  { key: "approvals", title: "Approvals" },
   { key: "payroll", title: "Payroll & Salary Integration" },
-  { key: "generationPayment", title: "Generation & Payment" },
   { key: "proration", title: "Proration" },
   { key: "managerWorksheetCfg", title: "Manager Worksheet" },
   { key: "payrollAuto", title: "Payroll Automation" },
@@ -204,18 +202,6 @@ export function buildContentModel(state: Record<string, unknown>): ContentModel 
     blocks.push({ type: "spacer" });
   }
 
-  // Calendar & scheduling
-  const calendarKeys = ["calendars", "calendarApproach", "calendarOverride", "calendarReopen", "calendarExceptions"];
-  const calendarObj: Record<string, unknown> = {};
-  calendarKeys.forEach((k) => {
-    if (!isEmpty(state[k])) calendarObj[k] = state[k];
-  });
-  if (Object.keys(calendarObj).length) {
-    blocks.push({ type: "h2", text: "Calendar & Scheduling" });
-    blocks.push(...objectToBlocks(calendarObj));
-    blocks.push({ type: "spacer" });
-  }
-
   // Shared requirements
   if (!isEmpty(state.shared)) {
     blocks.push({ type: "h2", text: "Shared Requirements" });
@@ -257,45 +243,6 @@ export function buildContentModel(state: Record<string, unknown>): ContentModel 
         blocks.push({ type: "spacer" });
       }
     });
-  }
-
-  // Final processing, security, reporting, communication, other
-  const wrapUp: [string, string][] = [
-    ["finalProcessingCommon", "Final Processing"],
-    ["finalProcessingPlans", "Final Processing — Plan Overrides"],
-    ["security", "Security"],
-    ["reportingCommon", "Reporting"],
-    ["reportingPlans", "Reporting — Plan Overrides"],
-    ["communication", "Communication"],
-    ["communicationPlans", "Communication — Plan Overrides"],
-  ];
-  const wrapUpBlocks: Block[] = [];
-  wrapUp.forEach(([key, title]) => {
-    const value = state[key];
-    if (isEmpty(value)) return;
-    wrapUpBlocks.push({ type: "h2", text: title });
-    if (isRowArray(value)) {
-      wrapUpBlocks.push(rowsToTable(value as Record<string, unknown>[]));
-    } else if (Array.isArray(value)) {
-      wrapUpBlocks.push({ type: "p", text: value.map(formatPrimitive).join(", ") });
-    } else {
-      wrapUpBlocks.push(...objectToBlocks(value as Record<string, unknown>));
-    }
-    wrapUpBlocks.push({ type: "spacer" });
-  });
-  if (wrapUpBlocks.length) {
-    blocks.push({ type: "pagebreak" });
-    blocks.push({ type: "h1", text: "Final Processing, Security & Reporting" });
-    blocks.push(...wrapUpBlocks);
-  }
-
-  if (!isEmpty(state.otherRequirements) || (state.otherText as string)) {
-    blocks.push({ type: "h2", text: "Other Requirements" });
-    if (state.otherText) blocks.push({ type: "p", text: String(state.otherText) });
-    if (isRowArray(state.otherRequirements)) {
-      blocks.push(rowsToTable(state.otherRequirements as Record<string, unknown>[]));
-    }
-    blocks.push({ type: "spacer" });
   }
 
   // Section-level free-text comments captured throughout the wizard

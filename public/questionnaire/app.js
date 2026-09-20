@@ -552,7 +552,6 @@ function isUnclassified(p){ return !p.moduleClass || p.moduleClass==='Not Yet Co
 const SECTIONS = [
   {id:'respondent', title:'Respondent Information', group:'Setup', always:true, render:renderRespondent, validate:validateRespondent},
   {id:'planRegister', title:'Compensation Plan Register', group:'Setup', always:true, render:renderPlanRegister, validate:validatePlanRegister},
-  {id:'calendar', title:'Calendar & Scheduling', group:'Setup', always:true, render:renderCalendar, validate:validateCalendar},
   {id:'shared', title:'Shared Requirements', group:'Setup', always:true, render:renderShared, validate:()=>[]},
   {id:'payrollAutoDetails', title:'Payroll-Classified Plan Details', group:'Plan Detail', visible:s=>s.plans.some(isPayrollClass), render:renderPayrollAutoDetails, validate:validatePayrollAutoDetails},
   {id:'individualCompDetails', title:'Individual Compensation Details', group:'Plan Detail', visible:s=>s.plans.some(isIndivComp), render:renderIndividualCompDetails, validate:()=>[]},
@@ -561,15 +560,10 @@ const SECTIONS = [
   {id:'performance', title:'Performance', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.performanceLinked==='Yes'), render:renderPerformance, validate:()=>[]},
   {id:'compaRatio', title:'Compa-Ratio', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.compaRatioLinked==='Yes'), render:renderCompaRatio, validate:()=>[]},
   {id:'budget', title:'Budget', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.budgetRequired==='Yes'), render:renderBudget, validate:()=>[]},
-  {id:'approvals', title:'Approvals', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.approvalRequired==='Yes'), render:renderApprovals, validate:validateApprovals},
   {id:'payroll', title:'Payroll & Salary Integration', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && (p.payrollImpact==='Yes'||p.salaryUpdate==='Yes')), render:renderPayroll, validate:()=>[]},
-  {id:'generationPayment', title:'Generation & Payment', group:'Plan Detail', visible:s=>s.plans.some(isWFC), render:renderGenerationPayment, validate:()=>[]},
   {id:'proration', title:'Proration', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.prorationRequired==='Yes'), render:renderProration, validate:()=>[]},
   {id:'managerWorksheet', title:'Manager Worksheet', group:'Plan Detail', visible:s=>s.plans.some(p=>isWFC(p) && p.managerWorksheetReq==='Yes'), render:renderManagerWorksheet, validate:()=>[]},
   {id:'communicationTemplates', title:'Communication Templates', group:'Plan Detail', visible:s=>s.plans.some(isWFC), render:renderCommunicationTemplates, validate:()=>[]},
-  {id:'finalProcessing', title:'Final Processing & Security', group:'Wrap-up', always:true, render:renderFinalProcessing, validate:()=>[]},
-  {id:'reporting', title:'Reporting & Communication', group:'Wrap-up', always:true, render:renderReporting, validate:()=>[]},
-  {id:'other', title:'Other Requirements', group:'Wrap-up', always:true, render:renderOther, validate:()=>[]},
   {id:'review', title:'Review & Submit', group:'Wrap-up', always:true, render:renderReview, validate:()=>[]}
 ];
 
@@ -712,185 +706,6 @@ function validatePlanRegister(){
   return errs;
 }
 
-/* ---- 5.3 Calendar ---- */
-function calFieldsForm(calObj){
-  const wrap = h('div',{});
-  const row1 = h('div',{class:'row'});
-  row1.appendChild(field('Calendar Name', textInput(calObj.name, v=>calObj.name=v)));
-  row1.appendChild(field('Compensation Year', numberInput(calObj.year, v=>calObj.year=v)));
-  wrap.appendChild(row1);
-  const row2 = h('div',{class:'row'});
-  const freqSel = selectInput(calObj.frequency, FREQUENCIES, v=>calObj.frequency=v, 'Select...');
-  row2.appendChild(field('Cycle Frequency', freqSel));
-  row2.appendChild(field('Compensation Cycle Type', selectInput(calObj.cycleType, CYCLE_TYPES, v=>calObj.cycleType=v, 'Select...')));
-  wrap.appendChild(row2);
-  if(calObj.frequency==='Other'){
-    wrap.appendChild(field('Specify Frequency', textInput(calObj.frequencyOther, v=>calObj.frequencyOther=v)));
-  }
-  const row3 = h('div',{class:'row'});
-  row3.appendChild(field('Cycle Start Date', dateInput(calObj.startDate, v=>calObj.startDate=v)));
-  row3.appendChild(field('Cycle End Date', dateInput(calObj.endDate, v=>calObj.endDate=v)));
-  wrap.appendChild(row3);
-  wrap.appendChild(field('Compensation Effective Date', dateInput(calObj.effectiveDate, v=>calObj.effectiveDate=v), {help:'This may differ from the cycle start/end dates.'}));
-  return wrap;
-}
-
-function renderCalendar(container){
-  container.appendChild(sectionHeader('Compensation Calendar & Plan Scheduling','Now that your compensation plans are registered, define how their calendars are organized.'));
-
-  if(state.plans.length===0){
-    container.appendChild(h('div',{class:'banner-err', text:'Please register at least one compensation plan first.'}));
-    return;
-  }
-
-  const approachCard = h('div',{class:'card'});
-  approachCard.appendChild(h('h3',{text:'Calendar Approach'}));
-  approachCard.appendChild(field('How are compensation calendars managed across the compensation plans?',
-    selectInput(state.calendarApproach, ['One common calendar for all plans','Different calendar for each plan','Some plans share a calendar and others use separate calendars'],
-      v=>{ state.calendarApproach = v==='One common calendar for all plans'?'1': v==='Different calendar for each plan'?'2':'3'; }, 'Select...')
-  ));
-  container.appendChild(approachCard);
-
-  const approach = state.calendarApproach;
-
-  if(approach==='1'){
-    if(state.calendars.length===0){ state.calendars.push({id:nextCalId(), name:'', year:'', frequency:'', startDate:'', endDate:'', effectiveDate:'', cycleType:'', planIds:[]}); }
-    const common = state.calendars[0];
-    const card = h('div',{class:'card'});
-    card.appendChild(h('h3',{text:'Common Compensation Calendar'}));
-    card.appendChild(calFieldsForm(common));
-    card.appendChild(field('Which compensation plans use this calendar?', chipMultiSelect(common.planIds.length?common.planIds:(common.planIds=state.plans.map(p=>p.id)), state.plans.map(p=>p.id), v=>common.planIds=v), {help:'Plan IDs shown; names: '+state.plans.map(p=>(p.id+' = '+(p.name||'—'))).join(', ')}));
-    container.appendChild(card);
-
-    const ovCard = h('div',{class:'card'});
-    ovCard.appendChild(h('h3',{text:'Common Calendar Override'}));
-    ovCard.appendChild(field('Does any compensation plan require a different calendar?', yesNo(state.calendarOverride.any, v=>state.calendarOverride.any=v)));
-    if(state.calendarOverride.any==='Yes'){
-      ovCard.appendChild(field('Select the plan requiring a different calendar', selectInput(state.calendarOverride.planId, state.plans.map(p=>p.id+' — '+(p.name||'Unnamed')), v=>state.calendarOverride.planId=v.split(' — ')[0], 'Select plan...')));
-      if(state.calendarOverride.planId){
-        if(!state.calendarOverride.calendar || !state.calendarOverride.calendar._init){
-          state.calendarOverride.calendar = {id:nextCalId(), name:'', year:'', frequency:'', startDate:'', endDate:'', effectiveDate:'', cycleType:'', planIds:[state.calendarOverride.planId], _init:true};
-        }
-        ovCard.appendChild(calFieldsForm(state.calendarOverride.calendar));
-      }
-    }
-    container.appendChild(ovCard);
-  }
-
-  if(approach==='2'){
-    const card = h('div',{class:'card'});
-    card.appendChild(h('h3',{text:'Plan Calendar Matrix'}));
-    card.appendChild(h('div',{class:'helper-text', text:'Each plan must have its own calendar.'}));
-    state.plans.forEach(p=>{
-      let cal = state.calendars.find(c=>c.planIds.includes(p.id));
-      if(!cal){ cal = {id:nextCalId(), name:'', year:'', frequency:p.frequency||'', startDate:'', endDate:'', effectiveDate:'', cycleType:'', planIds:[p.id]}; state.calendars.push(cal); }
-      const sub = h('div',{class:'subcard'});
-      sub.appendChild(h('h3',{text:p.name||p.id}));
-      sub.appendChild(calFieldsForm(cal));
-      card.appendChild(sub);
-    });
-    container.appendChild(card);
-  }
-
-  if(approach==='3'){
-    const card = h('div',{class:'card'});
-    card.appendChild(h('h3',{text:'Calendar Groups'}));
-    state.calendars.forEach((cal, idx)=>{
-      const sub = h('div',{class:'subcard'});
-      const hd = h('div',{style:'display:flex;justify-content:space-between;align-items:center;'});
-      hd.appendChild(h('h3',{text:cal.name || ('Calendar Group '+(idx+1))}));
-      const del = h('button',{class:'btn-danger btn-sm', type:'button', text:'Remove Group'});
-      del.addEventListener('click', ()=>{ state.calendars.splice(idx,1); persist(); render(); });
-      hd.appendChild(del);
-      sub.appendChild(hd);
-      sub.appendChild(calFieldsForm(cal));
-      sub.appendChild(field('Plans Using This Calendar', chipMultiSelect(cal.planIds, state.plans.map(p=>p.id), v=>cal.planIds=v)));
-      card.appendChild(sub);
-    });
-    const addBtn = h('button',{class:'btn-secondary', type:'button', text:'+ Add Calendar Group'});
-    addBtn.addEventListener('click', ()=>{
-      state.calendars.push({id:nextCalId(), name:'', year:'', frequency:'', startDate:'', endDate:'', effectiveDate:'', cycleType:'', planIds:[]});
-      persist(); render();
-    });
-    card.appendChild(addBtn);
-    container.appendChild(card);
-  }
-
-  // Frequency inheritance mismatch warnings
-  if(approach){
-    const mismatches=[];
-    state.plans.forEach(p=>{
-      const cal = findCalendarForPlan(p.id);
-      if(cal && cal.frequency && p.frequency && cal.frequency!==p.frequency) mismatches.push(p.name||p.id);
-    });
-    if(mismatches.length){
-      container.appendChild(h('div',{class:'banner-info', text:'The calendar frequency differs from the frequency initially specified for: '+mismatches.join(', ')+'. Please confirm this is intentional.'}));
-    }
-  }
-
-  // Plan-specific effective date confirmation
-  if(approach){
-    const effCard = h('div',{class:'card'});
-    effCard.appendChild(h('h3',{text:'Plan-Specific Effective Dates'}));
-    state.plans.forEach(p=>{
-      const sub = h('div',{class:'subcard'});
-      sub.appendChild(h('h3',{text:p.name||p.id}));
-      sub.appendChild(field('Does this plan use the same effective date as the calendar?', yesNo(p.effectiveDateSame, v=>p.effectiveDateSame=v)));
-      if(p.effectiveDateSame==='No'){
-        sub.appendChild(field('Plan-specific effective date', dateInput(p.effectiveDate, v=>p.effectiveDate=v)));
-      }
-      effCard.appendChild(sub);
-    });
-    container.appendChild(effCard);
-  }
-
-  // Reopening
-  const reopenCard = h('div',{class:'card'});
-  reopenCard.appendChild(h('h3',{text:'Calendar Reopening'}));
-  reopenCard.appendChild(field('Can a compensation cycle be reopened after completion?', yesNo(state.calendarReopen.allowed, v=>state.calendarReopen.allowed=v)));
-  if(state.calendarReopen.allowed==='Yes'){
-    reopenCard.appendChild(field('Who can reopen the cycle?', selectInput(state.calendarReopen.who, REOPEN_WHO, v=>state.calendarReopen.who=v, 'Select...')));
-    if(state.calendarReopen.who==='Other') reopenCard.appendChild(field('Specify', textInput(state.calendarReopen.whoOther, v=>state.calendarReopen.whoOther=v)));
-    reopenCard.appendChild(field('Under what circumstances?', textareaInput(state.calendarReopen.circumstances, v=>state.calendarReopen.circumstances=v)));
-    reopenCard.appendChild(field('Is additional approval required?', yesNo(state.calendarReopen.additionalApproval, v=>state.calendarReopen.additionalApproval=v)));
-  }
-  container.appendChild(reopenCard);
-
-  // Exceptions
-  const excCard = h('div',{class:'card'});
-  excCard.appendChild(h('h3',{text:'Calendar Exceptions'}));
-  excCard.appendChild(field('Are there any planned exceptions to the compensation calendar?', yesNo(state.calendarExceptions.has, v=>state.calendarExceptions.has=v)));
-  if(state.calendarExceptions.has==='Yes'){
-    excCard.appendChild(renderMatrix(state.calendarExceptions.rows, [
-      {key:'planCalendar', label:'Plan / Calendar', type:'text'},
-      {key:'exceptionType', label:'Exception Type', type:'select', options:EXCEPTION_TYPES},
-      {key:'originalDate', label:'Original Date', type:'date'},
-      {key:'newDate', label:'New Date', type:'date'},
-      {key:'reason', label:'Reason', type:'text'}
-    ]));
-  }
-  container.appendChild(excCard);
-  addSectionCommentBox(container, 'calendar');
-}
-function findCalendarForPlan(planId){
-  return state.calendars.find(c=>c.planIds && c.planIds.includes(planId)) ||
-    (state.calendarOverride.planId===planId ? state.calendarOverride.calendar : null);
-}
-function validateCalendar(){
-  const errs=[];
-  if(state.plans.length===0) return errs;
-  if(!state.calendarApproach) errs.push('Please select a calendar approach.');
-  state.plans.forEach(p=>{
-    const cal = findCalendarForPlan(p.id);
-    if(!cal) errs.push('Please assign a compensation calendar to every compensation plan before continuing ('+(p.name||p.id)+').');
-  });
-  if(state.calendarApproach==='3'){
-    state.calendars.forEach(c=>{
-      if(!c.planIds || c.planIds.length===0) errs.push('Please assign at least one compensation plan to calendar "'+(c.name||c.id)+'" or remove it.');
-    });
-  }
-  return errs;
-}
 
 /* ---- 5.4 Shared Requirements ---- */
 function renderShared(container){
@@ -974,18 +789,6 @@ function renderShared(container){
   }
   container.appendChild(c5);
 
-  // Approval
-  const c6 = h('div',{class:'card'});
-  c6.appendChild(h('h3',{text:'Approval'}));
-  c6.appendChild(field('Do all plans requiring approval use the same approval workflow?', selectInput(S.approval.same, ['Yes','No','Not Applicable'], v=>S.approval.same=v, 'Select...')));
-  if(S.approval.same==='Yes'){
-    c6.appendChild(h('div',{class:'helper-text', text:'Define the common approval matrix (levels apply to all plans requiring approval).'}));
-    c6.appendChild(renderMatrix(S.approval.levels, approvalColumns()));
-  } else if(S.approval.same==='No'){
-    c6.appendChild(h('div',{class:'helper-text', text:'Will be collected per plan (Approvals section).'}));
-  }
-  container.appendChild(c6);
-
   // Payroll
   const c7 = h('div',{class:'card'});
   c7.appendChild(h('h3',{text:'Payroll'}));
@@ -1009,19 +812,6 @@ function renderShared(container){
   container.appendChild(c8);
   addSectionCommentBox(container, 'shared');
 }
-function approvalColumns(){
-  return [
-    {key:'level', label:'Level', type:'number'},
-    {key:'approverRole', label:'Approver Role', type:'select', options:APPROVER_ROLE},
-    {key:'approvalBasedOn', label:'Approval Based On', type:'select', options:APPROVAL_BASED_ON},
-    {key:'condition', label:'Condition', type:'select', options:CONDITION_OPS},
-    {key:'from', label:'From', type:'text'},
-    {key:'to', label:'To', type:'text'},
-    {key:'finalApprover', label:'Final Approver?', type:'select', options:['Yes','No']},
-    {key:'comments', label:'Comments', type:'text'}
-  ];
-}
-
 /* ---- helper: iterate applicable plans with common/override pattern ---- */
 function planFilter(pred){ return state.plans.filter(pred); }
 
@@ -1142,60 +932,10 @@ function renderBudget(container){
   planSectionWrapper(container, 'Plan-Specific Budget', 'Only plans with Budget Required = Yes appear here.', plans, 'budget', SCHEMA_BUDGET, {commonLabel:'budget configuration'});
 }
 
-/* ---- 5.10 Approvals ---- */
-function renderApprovals(container){
-  const plans = planFilter(p=>isWFC(p) && p.approvalRequired==='Yes');
-  container.appendChild(sectionHeader('Plan-Specific Approvals', 'Only WFC-classified plans with Approval Required = Yes appear here. Add one row per approval level.'));
-  if(plans.length===0){
-    container.appendChild(h('div',{class:'empty-state'},[h('div',{text:'No plans require approval.'})]));
-    return;
-  }
-  plans.forEach(p=>{
-    const cfg = p.approvals;
-    const card = h('div',{class:'card'});
-    card.appendChild(h('h3',{},[h('span',{class:'plan-chip'},[p.name||p.id, h('span',{class:'id',text:' '+p.id})])]));
-    card.appendChild(useCommonBox('Does this plan use the common approval workflow?', cfg));
-    if(cfg.useCommon!=='Yes'){
-      card.appendChild(renderMatrix(cfg.levels, approvalColumns()));
-    } else {
-      card.appendChild(h('div',{class:'helper-text', text:'Inheriting the common approval matrix defined in Shared Requirements.'}));
-    }
-    const row = h('div',{class:'row'});
-    row.appendChild(field('Can someone stand in for an absent approver (a proxy)?', yesNo(cfg.proxyAllowed, v=>cfg.proxyAllowed=v)));
-    row.appendChild(field('Can the sheet still be edited after submission, or is it locked until approved?', yesNo(cfg.editableAfterSubmit, v=>cfg.editableAfterSubmit=v, ['Editable','Locked'])));
-    card.appendChild(row);
-    container.appendChild(card);
-  });
-  addSectionCommentBox(container, 'approvals');
-}
-function validateApprovals(){
-  const errs=[];
-  planFilter(p=>p.approvalRequired==='Yes').forEach(p=>{
-    const cfg=p.approvals;
-    if(cfg.useCommon!=='Yes' && (!cfg.levels || cfg.levels.length===0)) errs.push('At least one approval level is required for '+(p.name||p.id)+'.');
-  });
-  return errs;
-}
-
 /* ---- 5.11 Payroll ---- */
 function renderPayroll(container){
   const plans = planFilter(p=>isWFC(p) && (p.payrollImpact==='Yes'||p.salaryUpdate==='Yes'));
   planSectionWrapper(container, 'Plan-Specific Payroll & Salary Integration', 'Only WFC-classified plans with Payroll Impact or Salary Update = Yes appear here.', plans, 'payroll', SCHEMA_PAYROLL, {commonLabel:'Payroll / Salary Integration process'});
-}
-
-/* ---- 5.12 Generation & Payment ---- */
-function renderGenerationPayment(container){
-  container.appendChild(sectionHeader('Plan-Specific Generation & Payment', 'How each plan generates and pays out its compensation amount. WFC-classified plans only — Payroll and Individual Comp plans have their own sections.'));
-  planFilter(isWFC).forEach(p=>{
-    const cfg = p.generationPayment;
-    const card = h('div',{class:'card'});
-    card.appendChild(h('h3',{},[h('span',{class:'plan-chip'},[p.name||p.id, h('span',{class:'id',text:' '+p.id})])]));
-    const wrap = h('div',{});
-    renderSchemaForm(wrap, cfg, SCHEMA_GENERATION);
-    card.appendChild(wrap);
-    container.appendChild(card);
-  });
-  addSectionCommentBox(container, 'generationPayment');
 }
 
 /* ---- 5.13 Proration ---- */
@@ -1286,131 +1026,6 @@ function renderIndividualCompDetails(container){
   addSectionCommentBox(container, 'individualCompDetails');
 }
 
-/* ---- 5.15 Final Processing & Security ---- */
-function renderFinalProcessing(container){
-  container.appendChild(sectionHeader('Final Processing & Security','Wrap-up processing steps and who can see or edit compensation data.'));
-  const FP = state.finalProcessingCommon;
-  const card = h('div',{class:'card'});
-  card.appendChild(h('h3',{text:'Final Processing'}));
-  card.appendChild(field('Are final processing requirements the same across all compensation plans?', yesNo(FP.same, v=>FP.same=v)));
-  if(FP.same==='Yes'){
-    const row = h('div',{class:'row'});
-    row.appendChild(field('Final Processing By', selectInput(FP.by, FINAL_BY, v=>FP.by=v, 'Select...')));
-    row.appendChild(field('Final Review By', selectInput(FP.reviewBy, FINAL_BY, v=>FP.reviewBy=v, 'Select...')));
-    card.appendChild(row);
-    const row2 = h('div',{class:'row'});
-    row2.appendChild(field('HR Review Before Finalization?', yesNo(FP.hrReview, v=>FP.hrReview=v)));
-    row2.appendChild(field('Can Compensation Cycle Be Reopened?', yesNo(FP.reopen, v=>FP.reopen=v)));
-    card.appendChild(row2);
-    const row3 = h('div',{class:'row'});
-    row3.appendChild(field('Effective Date Confirmation Required?', yesNo(FP.effectiveDateConfirm, v=>FP.effectiveDateConfirm=v)));
-    row3.appendChild(field('Salary Update Automatic?', yesNo(FP.salaryAutoUpdate, v=>FP.salaryAutoUpdate=v)));
-    card.appendChild(row3);
-    card.appendChild(field('Payroll Transfer Automatic?', yesNo(FP.payrollAutoTransfer, v=>FP.payrollAutoTransfer=v)));
-  } else if(FP.same==='No'){
-    card.appendChild(h('div',{class:'helper-text', text:'Define final processing per plan below.'}));
-    card.appendChild(renderMatrix(state.finalProcessingPlans, [
-      {key:'plan', label:'Plan', type:'select', options:state.plans.map(p=>p.name||p.id)},
-      {key:'by', label:'Final Processing By', type:'select', options:FINAL_BY},
-      {key:'reviewBy', label:'Final Review By', type:'select', options:FINAL_BY},
-      {key:'hrReview', label:'HR Review Required?', type:'select', options:['Yes','No']},
-      {key:'reopen', label:'Can Be Reopened?', type:'select', options:['Yes','No']},
-      {key:'effectiveDateConfirm', label:'Effective Date Confirmation?', type:'select', options:['Yes','No']}
-    ]));
-  }
-  container.appendChild(card);
-
-  const SEC = state.security;
-  const secCard = h('div',{class:'card'});
-  secCard.appendChild(h('h3',{text:'Security'}));
-  secCard.appendChild(field('Are Workforce Compensation security requirements the same for all plans?', yesNo(SEC.same, v=>SEC.same=v)));
-  if(SEC.same==='Yes'){
-    secCard.appendChild(field('View Access', chipMultiSelect(SEC.viewAccess, SECURITY_ROLES, v=>SEC.viewAccess=v)));
-    secCard.appendChild(field('Edit Access', chipMultiSelect(SEC.editAccess, SECURITY_ROLES, v=>SEC.editAccess=v)));
-    const row = h('div',{class:'row'});
-    row.appendChild(field('Managers only see employees within their hierarchy?', yesNo(SEC.hierarchy, v=>SEC.hierarchy=v)));
-    row.appendChild(field('Employees see their own compensation results?', yesNo(SEC.employeeSeeOwn, v=>SEC.employeeSeeOwn=v)));
-    secCard.appendChild(row);
-  } else if(SEC.same==='No'){
-    secCard.appendChild(h('div',{class:'helper-text', text:'Define security per plan below.'}));
-    secCard.appendChild(renderMatrix(SEC.rows, [
-      {key:'plan', label:'Plan', type:'select', options:state.plans.map(p=>p.name||p.id)},
-      {key:'viewAccess', label:'View Access', type:'text'},
-      {key:'editAccess', label:'Edit Access', type:'text'},
-      {key:'hierarchy', label:'Hierarchy Restricted?', type:'select', options:['Yes','No']},
-      {key:'employeeSeeOwn', label:'Employee Self-View?', type:'select', options:['Yes','No']}
-    ]));
-  }
-  container.appendChild(secCard);
-  addSectionCommentBox(container, 'finalProcessing');
-}
-
-/* ---- 5.16 Reporting & Communication ---- */
-function renderReporting(container){
-  container.appendChild(sectionHeader('Reporting & Communication','Reports needed for compensation processing, plus how results are communicated to employees.'));
-
-  const RC = state.reportingCommon;
-  const card = h('div',{class:'card'});
-  card.appendChild(h('h3',{text:'Reporting'}));
-  card.appendChild(field('Are reporting requirements the same across all compensation plans?', yesNo(RC.same, v=>RC.same=v)));
-  const reportCols = [
-    {key:'report', label:'Report', type:'select', options:REPORTS_LIST},
-    {key:'audience', label:'Audience', type:'select', options:AUDIENCE},
-    {key:'fields', label:'Required Fields', type:'text'},
-    {key:'export', label:'Export Format', type:'select', options:EXPORT_FORMATS}
-  ];
-  if(RC.same==='Yes'){
-    card.appendChild(renderMatrix(RC.rows, reportCols));
-  } else if(RC.same==='No'){
-    card.appendChild(h('div',{class:'helper-text', text:'Define reporting per plan below.'}));
-    state.plans.forEach(p=>{
-      let planRows = state.reportingPlans.find(r=>r.planId===p.id);
-      if(!planRows){ planRows = {planId:p.id, rows:[]}; state.reportingPlans.push(planRows); }
-      const sub = h('div',{class:'subcard'});
-      sub.appendChild(h('h3',{text:p.name||p.id}));
-      sub.appendChild(renderMatrix(planRows.rows, reportCols));
-      card.appendChild(sub);
-    });
-  }
-  container.appendChild(card);
-
-  const COMM = state.communication;
-  const cCard = h('div',{class:'card'});
-  cCard.appendChild(h('h3',{text:'Employee Communication'}));
-  cCard.appendChild(field('Are employee communication requirements the same across all plans?', selectInput(COMM.same, ['Yes','No','Not Applicable'], v=>COMM.same=v, 'Select...')));
-  if(COMM.same==='Yes'){
-    cCard.appendChild(field('Employee Statement Required?', yesNo(COMM.statementRequired, v=>COMM.statementRequired=v)));
-    cCard.appendChild(field('Delivery Method', selectInput(COMM.delivery, DELIVERY_METHODS, v=>COMM.delivery=v, 'Select...')));
-    cCard.appendChild(field('Delivery Timing', textInput(COMM.timing, v=>COMM.timing=v)));
-    cCard.appendChild(field('Required Content', textareaInput(COMM.content, v=>COMM.content=v)));
-  } else if(COMM.same==='No'){
-    cCard.appendChild(h('div',{class:'helper-text', text:'Define communication per plan below.'}));
-    cCard.appendChild(renderMatrix(state.communicationPlans, [
-      {key:'plan', label:'Plan', type:'select', options:state.plans.map(p=>p.name||p.id)},
-      {key:'statementRequired', label:'Statement Required?', type:'select', options:['Yes','No']},
-      {key:'delivery', label:'Delivery Method', type:'select', options:DELIVERY_METHODS},
-      {key:'timing', label:'Delivery Timing', type:'text'},
-      {key:'content', label:'Required Content', type:'text'}
-    ]));
-  }
-  container.appendChild(cCard);
-  addSectionCommentBox(container, 'reporting');
-}
-
-/* ---- 5.17 Other Requirements ---- */
-function renderOther(container){
-  container.appendChild(sectionHeader('Other Requirements','Capture anything not covered elsewhere.'));
-  const card = h('div',{class:'card'});
-  card.appendChild(h('h3',{text:'Additional Requirements Matrix'}));
-  card.appendChild(renderMatrix(state.otherRequirements, [
-    {key:'area', label:'Area', type:'select', options:OTHER_AREAS},
-    {key:'question', label:'Requirement / Question', type:'text'},
-    {key:'response', label:'Response', type:'text'}
-  ]));
-  card.appendChild(field('Any additional business rule, exception, integration, or requirement that has not been covered?', textareaInput(state.otherText, v=>state.otherText=v, 5)));
-  container.appendChild(card);
-}
-
 /* ---- 5.18 Review & Submit ---- */
 function reviewItem(k,v){ return h('div',{class:'review-item'},[h('div',{class:'k',text:k}), h('div',{class:'v',text:(v===''||v===undefined||v===null)?'—':(Array.isArray(v)?v.join(', '):v)})]); }
 function editBtn(sectionId){
@@ -1437,12 +1052,9 @@ function renderReview(container){
   grid.appendChild(reviewItem('Position', r.position));
   grid.appendChild(reviewItem('Company', r.company));
   grid.appendChild(reviewItem('Email', r.email));
-  grid.appendChild(reviewItem('Calendar Approach', {'1':'One common calendar','2':'Different calendar per plan','3':'Some plans share calendars'}[state.calendarApproach]||'—'));
   grid.appendChild(reviewItem('Currency (common)', state.shared.currency.same==='Yes'? state.shared.currency.value : 'Per plan'));
   grid.appendChild(reviewItem('Salary Source (common)', state.shared.salarySource.same==='Yes'? state.shared.salarySource.source : 'Per plan'));
   grid.appendChild(reviewItem('Performance Source (common)', state.shared.performance.same==='Yes'? state.shared.performance.source : (state.shared.performance.same==='No'?'Per plan':'N/A')));
-  grid.appendChild(reviewItem('Final Processing', state.finalProcessingCommon.same==='Yes' ? state.finalProcessingCommon.by : 'Per plan'));
-  grid.appendChild(reviewItem('Security', state.security.same==='Yes' ? (state.security.viewAccess||[]).join(', ') : 'Per plan'));
   common.appendChild(grid);
   container.appendChild(common);
 
@@ -1477,16 +1089,12 @@ function renderReview(container){
       ['Proration Required', p.prorationRequired],['Manager Worksheet', p.managerWorksheetReq]
     ]);
     if(isWFC(p)){
-      const cal = findCalendarForPlan(p.id);
-      sub('Calendar','calendar',[['Calendar', cal?(cal.name||cal.id):'Not assigned'],['Effective Date', p.effectiveDateSame==='No'?p.effectiveDate:(cal?cal.effectiveDate:'')]]);
       sub('Eligibility & Core HR','eligibility',[['Uses Common', p.eligibility.useCommon],['Rows Defined', (p.eligibility.rows||[]).length]]);
       sub('Calculation & Guidelines','calculation',[['Uses Common', p.calculation.useCommon],['Basis', p.calculation.basis],['Method', p.calculation.method]]);
       if(p.performanceLinked==='Yes') sub('Performance','performance',[['Uses Common', p.performance.useCommon],['Source', p.performance.source]]);
       if(p.compaRatioLinked==='Yes') sub('Compa-Ratio','compaRatio',[['Uses Common', p.compaRatio.useCommon],['Source', p.compaRatio.source]]);
       if(p.budgetRequired==='Yes') sub('Budget','budget',[['Uses Common', p.budget.useCommon],['Type', p.budget.type],['Level', p.budget.level]]);
-      if(p.approvalRequired==='Yes') sub('Approvals','approvals',[['Uses Common', p.approvals.useCommon],['Levels Defined', (p.approvals.levels||[]).length],['Proxy Allowed', p.approvals.proxyAllowed]]);
       if(p.payrollImpact==='Yes'||p.salaryUpdate==='Yes') sub('Payroll & Salary Integration','payroll',[['Uses Common', p.payroll.useCommon],['Payroll Action', p.payroll.payrollAction],['Rollback Allowed', p.payroll.rollbackAllowed]]);
-      sub('Generation & Payment','generationPayment',[['Method', p.generationPayment.method],['Payment Type', p.generationPayment.paymentType]]);
       if(p.prorationRequired==='Yes') sub('Proration','proration',[['Uses Common', p.proration.useCommon],['Method', p.proration.method]]);
       if(p.managerWorksheetReq==='Yes') sub('Manager Worksheet','managerWorksheet',[['Uses Common', p.managerWorksheetCfg.useCommon]]);
     }
@@ -1510,15 +1118,6 @@ function renderReview(container){
     cardWrap.appendChild(body);
     container.appendChild(cardWrap);
   });
-
-  // Other requirements
-  if(state.otherRequirements.length || state.otherText){
-    const o = h('div',{class:'review-block'});
-    o.appendChild(h('h3',{},['Other Requirements', editBtn('other')]));
-    if(state.otherText) o.appendChild(h('p',{text:state.otherText}));
-    o.appendChild(h('div',{text:(state.otherRequirements.length)+' additional requirement row(s) captured.'}));
-    container.appendChild(o);
-  }
 
   // Export + Submit
   const actionsCard = h('div',{class:'card'});
@@ -1567,17 +1166,7 @@ function exportJSON(){
   const payload = {
     common: {
       respondent: state.respondent,
-      calendarApproach: state.calendarApproach,
-      calendars: state.calendars,
-      calendarReopen: state.calendarReopen,
-      calendarExceptions: state.calendarExceptions,
-      sharedRequirements: state.shared,
-      finalProcessingCommon: state.finalProcessingCommon,
-      security: state.security,
-      reportingCommon: state.reportingCommon,
-      communication: state.communication,
-      otherRequirements: state.otherRequirements,
-      otherText: state.otherText
+      sharedRequirements: state.shared
     },
     planSpecific: state.plans
   };
